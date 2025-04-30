@@ -1,0 +1,10 @@
+services:
+  - type: web
+    name: control-vehicular
+    env: python
+    buildCommand: |
+      apt-get update
+      apt-get install -y libzbar0
+      pip install -r requirements.txt
+    startCommand: python control.py
+    plan: free
