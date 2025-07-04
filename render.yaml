@@ -1,6 +1,0 @@
-services:
-  - type: web
-    name: controlvehicular
-    env: python
-    buildCommand: ""
-    startCommand: bash build.sh && python control.py

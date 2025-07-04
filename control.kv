@@ -1,0 +1,20 @@
+<QRScanner>:
+    orientation: 'vertical'
+    padding: 10
+    spacing: 10
+
+    Image:
+        id: camera_view
+        size_hint_y: 0.85
+        allow_stretch: True
+        keep_ratio: True
+        source: ''  # la imagen se actualiza desde Python con self.image.texture
+
+    Label:
+        id: qr_label
+        text: root.label.text
+        size_hint_y: 0.15
+        font_size: '18sp'
+        halign: 'center'
+        valign: 'middle'
+        text_size: self.width, None

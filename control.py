@@ -16,9 +16,103 @@ import time
 from datetime import datetime
 import tkinter as tk
 from tkinter import ttk, filedialog, simpledialog, messagebox
+
 from PIL import Image, ImageTk, ImageDraw, ImageFont
 import smtplib
 from email.message import EmailMessage
+import tkinter as tk
+import sys
+import qrcode
+import socket
+
+import socket
+
+
+def get_remote_config(feature):
+    """Consulta Supabase para saber si una función está habilitada para este dispositivo."""
+    device_id = socket.gethostname()
+    try:
+        res = supabase.table('remote_config').select('enabled').eq('device_id', device_id).eq('feature', feature).limit(1).execute()
+        if res.data and 'enabled' in res.data[0]:
+            return bool(res.data[0]['enabled'])
+        # Si no hay configuración, por defecto habilitado
+        return True
+    except Exception as e:
+        print(f"Error consultando remote_config: {e}")
+        # Si hay error, por seguridad deshabilita la función
+        return False
+    
+def mostrar_aviso_privacidad():
+    aviso = aviso = (
+    "Nombre de la aplicación: Control de Accesos\n"
+    "Responsable del tratamiento: FUENTES ESTEVES MAGALI \n"
+    "Correo de contacto: controldeaccesoas@gmail.com\n\n"
+
+    "1. Finalidad del tratamiento de datos\n"
+    "Los datos personales que se recaban a través de esta aplicación (nombre, tipo de vehículo, placas, correo electrónico y datos de acceso) serán utilizados exclusivamente para las siguientes finalidades:\n"
+    "- Verificar la identidad de los usuarios y controlar el acceso vehicular autorizado.\n"
+    "- Registrar y consultar accesos mediante escaneo de códigos QR.\n"
+    "- Enviar notificaciones relacionadas con el acceso y la seguridad.\n"
+    "- Generar reportes de uso para propósitos administrativos internos.\n\n"
+
+    "2. Datos personales recabados\n"
+    "- Nombre del propietario\n"
+    "- Tipo de vehículo (auto o motocicleta)\n"
+    "- Placas del vehículo\n"
+    "- Correo electrónico\n"
+    "- Fecha y hora de accesos registrados\n\n"
+
+    "3. Transferencia de datos\n"
+    "Los datos no serán compartidos con terceros, salvo que exista obligación legal, orden judicial o autorización expresa del titular.\n\n"
+
+    "4. Derechos ARCO\n"
+    "El titular de los datos puede en todo momento ejercer sus derechos de Acceso, Rectificación, Cancelación u Oposición al tratamiento de sus datos personales, enviando una solicitud al correo electrónico indicado.\n"
+    "La solicitud deberá contener:\n"
+    "- Nombre del titular\n"
+    "- Descripción clara de los datos respecto de los que se solicita ejercer algún derecho\n"
+    "- Medio para comunicar la respuesta (correo electrónico)\n\n"
+
+    "5. Medidas de seguridad\n"
+    "La aplicación implementa protocolos de seguridad como cifrado de datos en tránsito (HTTPS), autenticación y restricción de acceso para proteger la información.\n"
+    "Los datos están almacenados de forma segura en la plataforma Supabase, la cual cumple con estándares internacionales de seguridad.\n\n"
+
+    "6. Cambios al aviso de privacidad\n"
+    "Nos reservamos el derecho de modificar este Aviso de Privacidad. Cualquier cambio será notificado a través de la aplicación."
+)
+    def abrir_aviso_completo():
+        ventana_aviso = tk.Toplevel(root)
+        ventana_aviso.title("Aviso de Privacidad Completo")
+        ventana_aviso.geometry("400x300")
+        texto = tk.Text(ventana_aviso, wrap="word")
+        texto.insert("1.0", aviso)
+        texto.config(state="disabled")
+        texto.pack(expand=True, fill="both", padx=10, pady=10)
+        tk.Button(ventana_aviso, text="Cerrar", command=ventana_aviso.destroy).pack(pady=10)
+
+    def aceptar():
+        root.destroy()  # Cierra la ventana del aviso y continúa con la app
+
+    def cancelar():
+        root.destroy()
+        sys.exit()      # Cierra toda la app
+
+    root = tk.Tk()
+    root.title("Aviso de Privacidad")
+    root.geometry("350x200")
+    label = tk.Label(root, text="¿Acepta el aviso de privacidad para continuar?", wraplength=320, justify="left")
+    label.pack(pady=15)
+    btn_frame = tk.Frame(root)
+    btn_frame.pack(pady=10)
+    tk.Button(btn_frame, text="Cancelar", width=10, command=cancelar).pack(side="left", padx=5)
+    tk.Button(btn_frame, text="Ver aviso completo", width=18, command=abrir_aviso_completo).pack(side="left", padx=5)
+    tk.Button(btn_frame, text="Aceptar", width=10, command=aceptar).pack(side="left", padx=5)
+
+    # Si el usuario cierra la ventana con el tache, también se cierra la app
+    root.protocol("WM_DELETE_WINDOW", cancelar)
+
+    root.mainloop()
+
+mostrar_aviso_privacidad()
 
 # --- Instalación automática de paquetes ---
 REQUIREMENTS = [
@@ -40,29 +134,33 @@ from pyzbar import pyzbar
 DB_PATH = 'access_control.db'
 
 
+
 # --- Funciones Auxiliares ---
-def generate_qr(data, save_dir='qrcodes'):
+def generate_qr(plate, save_dir='qrcodes'):
     os.makedirs(save_dir, exist_ok=True)
-    path = os.path.join(save_dir, f"{data}.png")
+    qr_data = plate.upper()  # Solo la placa en mayúsculas
+    path = os.path.join(save_dir, f"{qr_data}.png")
     qr = qrcode.QRCode(box_size=6, border=2)
-    qr.add_data(data); qr.make(fit=True)
-    img = qr.make_image(fill='black', back_color='white'); img.save(path)
+    qr.add_data(qr_data)
+    qr.make(fit=True)
+    img = qr.make_image(fill_color='black', back_color='white')
+    img.save(path)
     return path
 
 def register_user(name, vehicle, plate):
     if not name or not vehicle or not plate:
         return False, None
-    
+
     qr_path = generate_qr(plate)
-    
+
     try:
         response = supabase.table('users').insert({
             "name": name,
             "vehicle_type": vehicle,
-            "plate": plate,
+            "plate": plate.upper(),  # Guarda la placa en mayúsculas en la base
             "qr_path": qr_path
         }).execute()
-        
+
         if response.data:
             return True, qr_path
         return False, None
@@ -81,14 +179,29 @@ def log_event(user_id, event):
 
 # --- UI Configuración ---
 WIDTH, HEIGHT = 360, 640
-PRIMARY = '#6A1B9A'; BG = '#FFFFFF'; ACC='#1ECA3C'; DENY='#E53935'; FONT='Arial'; GRAY = 'gray'  
+PRIMARY = '#6A1B9A'   # Morado principal
+SECONDARY = '#8E24AA' # Morado secundario
+ACC = '#1ECA3C'
+DENY = '#E53935'
+BG = '#F3E5F5'        # Fondo lila claro
+GRAY = '#B39DDB'
+FONT = 'Arial'
+def style_button(btn, color=PRIMARY, fg='white'):
+    btn.config(
+        bg=color, fg=fg, activebackground=SECONDARY, activeforeground='white',
+        relief='flat', font=(FONT, 12, 'bold'), bd=0, cursor='hand2', padx=8, pady=4
+    )
 
 class App(tk.Tk):
     def __init__(self):
         super().__init__()
         self.title('Control Accesos')
         self.geometry(f'{WIDTH}x{HEIGHT}')
-        self.configure(bg=BG); self.resizable(False, False)
+        self.configure(bg=BG)
+        self.resizable(False, False)
+
+     
+
         # App Bar
         bar = tk.Frame(self, bg=PRIMARY, height=50)
         bar.pack(fill='x')
@@ -114,30 +227,43 @@ class App(tk.Tk):
         frame.tkraise()
         if hasattr(frame, 'on_show'): frame.on_show()
 
+
+
+# === CLASE PRINCIPAL HOME ===
 class Home(tk.Frame):
     def __init__(self, parent, controller):
         super().__init__(parent, bg=BG)
         logo = 'tecnm_logo.png'
+
         if os.path.exists(logo):
             img = Image.open(logo).resize((120,120), Image.LANCZOS)
         else:
             img = Image.new('RGB', (120,120), BG)
             d = ImageDraw.Draw(img)
-            f = ImageFont.load_default()  # <-- Sin ; aquí
+            f = ImageFont.load_default()
             text = 'TECNM'
-            bbox = d.textbbox((0, 0), text, font=f)  # <-- Línea correctamente alineada
-            w = bbox[2] - bbox[0]  # <-- Mismo nivel de sangría
-            h = bbox[3] - bbox[1]  # <-- Mismo nivel de sangría
-            d.text(((120-w)/2, (120-h)/2), text, fill=PRIMARY, font=f)  # <-- Sangría correcta
+            bbox = d.textbbox((0, 0), text, font=f)
+            w = bbox[2] - bbox[0]
+            h = bbox[3] - bbox[1]
+            d.text(((120-w)/2, (120-h)/2), text, fill=PRIMARY, font=f)
+
         ph = ImageTk.PhotoImage(img)
         tk.Label(self, image=ph, bg=BG).pack(pady=20)
         self.logo = ph
+
+        # Título grande
+        tk.Label(self, text="Bienvenido", bg=BG, fg=PRIMARY, font=(FONT, 20, 'bold')).pack(pady=(0, 10))
+
         for text, cls in [('Registrar', Register), ('Escanear', Scan), ('Admin', Admin)]:
             btn = tk.Button(
-                self, text=text, font=(FONT,14), bg=PRIMARY, fg='white', relief='flat',
-                command=lambda c=cls: controller.show(c), width=15
+                self, text=text, width=18,
+                command=lambda c=cls: controller.show(c)
             )
-            btn.pack(pady=10)
+            style_button(btn)
+            btn.pack(pady=12)
+       
+
+
 
 class Register(tk.Frame):
     def __init__(self, parent, controller):
@@ -167,6 +293,7 @@ class Register(tk.Frame):
         self.btn_email = tk.Button(self.btn_frame_main, text='Enviar Email', bg=PRIMARY, fg='white',
                                    width=12, relief='raised', state='disabled', command=self.email_qr)
         self.btn_email.pack(side='left', padx=5)
+        
 
         # Navegación abajo (Home, Admin)
         nav_frame = tk.Frame(self, bg=BG)
@@ -215,9 +342,14 @@ class Register(tk.Frame):
             messagebox.showinfo('Guardado', f'QR guardado en:\n{dest}')
 
     def email_qr(self):
-        if not self.current_qr: return
+        if not get_remote_config('email'):
+            messagebox.showerror('Error', 'La función de enviar email está desactivada remotamente.')
+            return
+        if not self.current_qr:
+            return
         to_addr = simpledialog.askstring('Enviar Email', 'Dirección de correo destino:')
-        if not to_addr: return
+        if not to_addr:
+            return
         try:
             # Configura tus credenciales SMTP aquí
             smtp_server = 'smtp.gmail.com'
@@ -229,7 +361,37 @@ class Register(tk.Frame):
             msg['Subject'] = 'Tu Código QR de Acceso'
             msg['From'] = smtp_user
             msg['To'] = to_addr
-            msg.set_content('Adjunto encontrarás tu código QR de acceso.')
+            msg.set_content('Adjunto encontrarás tu código QR de acceso.'
+                            ' Este es el aviso de privacidad:\n\n'
+                            "Nombre de la aplicación: Control de Accesos\n"
+                            "Responsable del tratamiento: FUENTES ESTEVES MAGALI\n"
+                            "Correo de contacto: controldeaccesoas@gmail.com\n\n"
+                            "1. Finalidad del tratamiento de datos\n"
+                            "Los datos personales que se recaban a través de esta aplicación (nombre, tipo de vehículo, placas, correo electrónico y datos de acceso) serán utilizados exclusivamente para las siguientes finalidades:\n"
+                            "- Verificar la identidad de los usuarios y controlar el acceso vehicular autorizado.\n"
+                            "- Registrar y consultar accesos mediante escaneo de códigos QR.\n"
+                            "- Enviar notificaciones relacionadas con el acceso y la seguridad.\n"
+                            "- Generar reportes de uso para propósitos administrativos internos.\n\n"
+                            "2. Datos personales recabados\n"
+                            "- Nombre del propietario\n"
+                            "- Tipo de vehículo (auto o motocicleta)\n"
+                            "- Placas del vehículo\n"
+                            "- Correo electrónico\n"
+                            "- Fecha y hora de accesos registrados\n\n"
+                            "3. Transferencia de datos\n"
+                            "Los datos no serán compartidos con terceros, salvo que exista obligación legal, orden judicial o autorización expresa del titular.\n\n"
+                            "4. Derechos ARCO\n"
+                            "El titular de los datos puede en todo momento ejercer sus derechos de Acceso, Rectificación, Cancelación u Oposición al tratamiento de sus datos personales, enviando una solicitud al correo electrónico indicado.\n"
+                            "La solicitud deberá contener:\n"
+                            "- Nombre del titular\n"
+                            "- Descripción clara de los datos respecto de los que se solicita ejercer algún derecho\n"
+                            "- Medio para comunicar la respuesta (correo electrónico)\n\n"
+                            "5. Medidas de seguridad\n"
+                            "La aplicación implementa protocolos de seguridad como cifrado de datos en tránsito (HTTPS), autenticación y restricción de acceso para proteger la información.\n"
+                            "Los datos están almacenados de forma segura en la plataforma Supabase, la cual cumple con estándares internacionales de seguridad.\n\n"
+                            "6. Cambios al aviso de privacidad\n"
+                            "Nos reservamos el derecho de modificar este Aviso de Privacidad. Cualquier cambio será notificado a través de la aplicación."
+            )
 
             with open(self.current_qr, 'rb') as f:
                 data = f.read()
@@ -242,6 +404,18 @@ class Register(tk.Frame):
             messagebox.showinfo('Email enviado', f'QR enviado a {to_addr}')
         except Exception as e:
             messagebox.showerror('Error', f'No se pudo enviar email:\n{e}')
+            
+    def on_show(self):
+        # Consulta el flag remoto cada vez que se muestra la pantalla
+        email_enabled = get_remote_config('email')
+        state = 'normal' if email_enabled else 'disabled'
+        self.btn_email.config(state=state)
+        # Opcional: muestra un aviso si está deshabilitado
+        if not email_enabled:
+            self.note.config(text='Función de email desactivada remotamente', fg=DENY)
+        else:
+            self.note.config(text='', fg=ACC)
+
 
 class Scan(tk.Frame):
     def __init__(self, parent, controller):
